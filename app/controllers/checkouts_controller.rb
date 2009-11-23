@@ -16,16 +16,16 @@ class CheckoutsController < Spree::BaseController
     rescue Spree::GatewayError => ge
       flash[:error] = t("unable_to_authorize_credit_card") + ": #{ge.message}"
       redirect_to edit_object_url and return
-    rescue Exception => oe
+    rescue Exception => oe      
       flash[:error] = t("unable_to_authorize_credit_card") + ": #{oe.message}"
       logger.unknown "#{flash[:error]}  #{oe.backtrace.join("\n")}"
       redirect_to edit_object_url and return
     end
   end
+  
 
   update do
     flash nil
-
     success.wants.html do
       if @order.reload.checkout_complete 
         if current_user
@@ -64,47 +64,7 @@ class CheckoutsController < Spree::BaseController
     end
   end
 
-  update.before do
-    # update user to current one if user has logged in
-    @order.update_attribute(:user, current_user) if current_user
-
-    if (checkout_info = params[:checkout]) and not checkout_info[:coupon_code]
-      # overwrite any earlier guest checkout email if user has since logged in
-      checkout_info[:email] = current_user.email if current_user
-
-      # and set the ip_address to the most recent one
-      checkout_info[:ip_address] = request.env['REMOTE_ADDR']
-
-      # check whether the bill address has changed, and start a fresh record if
-      # we were using the address stored in the current user.
-      if checkout_info[:bill_address_attributes] and @checkout.bill_address
-        # always include the id of the record we must write to - ajax can't refresh the form
-        checkout_info[:bill_address_attributes][:id] = @checkout.bill_address.id
-        new_address = Address.new checkout_info[:bill_address_attributes]
-        if not @checkout.bill_address.same_as?(new_address) and
-             current_user and @checkout.bill_address == current_user.bill_address
-          # need to start a new record, so replace the existing one with a blank
-          checkout_info[:bill_address_attributes].delete :id
-          @checkout.bill_address = Address.new
-        end
-      end
-
-      # check whether the ship address has changed, and start a fresh record if
-      # we were using the address stored in the current user.
-      if checkout_info[:shipment_attributes][:address_attributes] and @order.shipment.address
-        # always include the id of the record we must write to - ajax can't refresh the form
-        checkout_info[:shipment_attributes][:address_attributes][:id] = @order.shipment.address.id
-        new_address = Address.new checkout_info[:shipment_attributes][:address_attributes]
-        if not @order.shipment.address.same_as?(new_address) and
-             current_user and @order.shipment.address == current_user.ship_address
-          # need to start a new record, so replace the existing one with a blank
-          checkout_info[:shipment_attributes][:address_attributes].delete :id
-          @order.shipment.address = Address.new
-        end
-      end
-
-    end
-  end
+  update.before :update_before
 
   update.after do
     @order.save!		# expect messages here
@@ -159,5 +119,60 @@ class CheckoutsController < Spree::BaseController
   def prevent_editing_complete_order      
     load_object
     redirect_to order_url(parent_object) if @order.checkout_complete
-  end  
+  end 
+  
+  def check_bill_address
+    # check whether the bill address has changed, and start a fresh record if
+    # we were using the address stored in the current user.
+    if checkout_info[:bill_address_attributes] and @checkout.bill_address
+      # always include the id of the record we must write to - ajax can't refresh the form
+      checkout_info[:bill_address_attributes][:id] = @checkout.bill_address.id
+      new_address = Address.new checkout_info[:bill_address_attributes]
+      if not @checkout.bill_address.same_as?(new_address) and
+           current_user and @checkout.bill_address == current_user.bill_address
+        # need to start a new record, so replace the existing one with a blank
+        checkout_info[:bill_address_attributes].delete :id
+        @checkout.bill_address = Address.new
+      end
+    end
+  end
+  
+  def check_ship_address
+    # check whether the ship address has changed, and start a fresh record if
+    # we were using the address stored in the current user.
+    if checkout_info[:shipment_attributes][:address_attributes] and @order.shipment.address
+      # always include the id of the record we must write to - ajax can't refresh the form
+      checkout_info[:shipment_attributes][:address_attributes][:id] = @order.shipment.address.id
+      new_address = Address.new checkout_info[:shipment_attributes][:address_attributes]
+      if not @order.shipment.address.same_as?(new_address) and
+           current_user and @order.shipment.address == current_user.ship_address
+        # need to start a new record, so replace the existing one with a blank
+        checkout_info[:shipment_attributes][:address_attributes].delete :id
+        @order.shipment.address = Address.new
+      end
+    end
+  end
+  
+  def update_before
+    return false
+    # redirect_to "http://yahoo.com"
+    # return false
+    # # update user to current one if user has logged in
+    # @order.update_attribute(:user, current_user) if current_user
+    # 
+    # if (checkout_info = params[:checkout]) and not checkout_info[:coupon_code]
+    #   # overwrite any earlier guest checkout email if user has since logged in
+    #   checkout_info[:email] = current_user.email if current_user
+    # 
+    #   # and set the ip_address to the most recent one
+    #   checkout_info[:ip_address] = request.env['REMOTE_ADDR']
+    # 
+    #   check_bill_address
+    #   
+    #   check_ship_address
+    # 
+    # end
+  end
+  
+  
 end
